@@ -1,9 +1,8 @@
-import token
 from django.middleware.csrf import get_token
 from django.utils.html import escape
 
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, request
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.urls import reverse
 
 from notes import data
@@ -499,204 +498,392 @@ form > p:first-child {{
 
 def _csfr_field (request:HttpRequest) -> str:
     token = get_token(request)
-    return f"<input type='hidden' name ='csrfmiddlewaretoken' value = '{escape(token)}'>"
+    return( 
+        f"<input" 
+        f"type='hidden'" 
+        f"name ='csrfmiddlewaretoken'" 
+        f"value = '{escape(token)}'"
+        f">"
+
+)
 
 
+def index(request: HttpRequest):
 
-def index(request: HttpRequest) -> HttpResponse:
-    body =f""" 
-    
-    <h1> Welocme! this is the main page </h1> 
-        <p> 
-        
-            <a href = "{escape (reverse('notes_list'))}">  
-            Go to the list of notes </a> 
-        
-        </p>
-        
-        """
+    return render(request, 'notes/home.html')
 
 
-    return HttpResponse(html_shell("Home page",body))
+def about(request: HttpRequest):
 
-
-
-def about(request: HttpRequest) -> HttpResponse:
-
-    body = f""" 
-    
-    <h1> About project </h1> 
-        <p> 
-        
-        This is a cool project
-        
-        </p>
-        
-        """ 
-
-    return HttpResponse (html_shell("about",body))
-
-
+    return render(request, 'notes/about.html')
 
 
 def notes_view_list(request: HttpRequest) -> HttpResponse:
 
-
-    raw_tag = request.GET.get('tag')
-    raw_category = request.GET.get('category')
-
     
     notes = data.list_notes()
 
-    if raw_tag: 
-        tag_filter = raw_tag.strip().lower()
-        notes = [n for n in notes if n['tag'].lower() == tag_filter]
 
-
-    if raw_category:
-            
-            category_filter = raw_category.strip().lower()
-            notes = [n for n in notes if n['category'].lower() == category_filter]
-
-
-    items: list[str] = []
-
-    for note in notes: 
-
-
-        url = reverse('notes_detail', kwargs = {'note_id': note["id"]})
-
-        items.append( 
-
-        f"""
-        
-        <li>
-            <p>
-
-                <a href  ="{url}" > 
-                {escape(note["title"])}
-
-                </br>
-
-                Category: <small> {escape(note["category"])}</small>
-
-                </br>
-
-                Tag: <small> {escape(note["tag"])}</small>
-            
-                </a>
-
-            </p>
-
-        </li>
-        
-    """)
-
-        body = f"""
-
-            <h1>Knowledgehub notes list</h1>
-            <ul>
-                {"".join(items)}
-            </ul>
-
-        """
-
-
-    return HttpResponse(html_shell("Notes list", body))
-
+    return render(request, 'notes/notes_list.html', {'notes': notes})
 
 
 
 def notes_detail (request: HttpRequest, note_id: int) -> HttpResponse:
 
+
     note = data.get_note(note_id)
-    body = f"""
-        <h1>{escape(note["title"])}</h1>
+   
 
-        <p>
-
-            {escape(note["body"])}
-        </p>
-        </br>
-
-        Категория: <small>{escape(note["category"])}</small>
-        </br>
-        Tag: <small> {escape(note["tag"])}</small>
-       
-        <p>
-            <a href="{escape(reverse('notes_list'))}">
-                Return to notes list
-            </a>
-        </p>
-
-    """
-
-
-    return HttpResponse (html_shell(f"{note['title']}", body))
+    return render(request, 'notes/note_detail.html', {'note': note})
 
 
 
 def notes_create (request: HttpRequest) -> HttpResponse:
 
 
+    error = ""
+
+
     if request.method == "POST":
 
-        title = request.POST.get ('title', '')
-        note_body = request.POST.get ('body', '')
-        tag = request.POST.get ('tag', '')
-        category = request.POST.get ('category', '')
+        title = request.POST.get ("title", "")
+        note_body = request.POST.get ('body', "")
+        tag = request.POST.get ("tag", "")
+        category = request.POST.get ("category", "")
 
 
         if not title.strip():
-            err = "<p> title can not be empty </p>"
+
+            error = """  
+            <div class = "form-error"> Title can not be empty </div>
+            
+            """
+
+
         else:
+
             created = data.create_note(
+
                 title=title,
                 body=note_body,
-                tag=tag or 'mixed',
-                category = category or 'main',
+                tag=(tag or 'mixed'),
+                category = (category or 'main'),
 
             )
 
-            list_url = escape (reverse('notes_list'))
-
-            return HttpResponse(
-
-                f"""
-                <h1> Note created </h1>
-                <p> id = {created["id"]}, title = {escape(created['title'])}</p>
-                <p>
-                    <a href="{list_url}">
-                        Return to notes list
-                    </a>
-                </p>
-                """
+            return redirect(
+                "notes_detail",
+                note_id=created["id"]
             )
-
-    else: 
-
-        err=""
-
-
+       
 
     action = f"{escape(reverse('notes_create'))}"
+    
+    list_url = escape(
+        reverse("notes_list")
+    )
     form=f"""
     <form method = "post" action = "{action}">
-        {err}
+        {error}
         {_csfr_field(request)}
         <h1>New note </h1>
 
         <p><label>Title:</label></p>
-        <p><input type = "text" name = "title" required></p>
+        <p><input type = "text" name = "title" placeholder="Введите заголовок" required></p>
         <p><label>Заметка:</label></p>
-        <p><input type="text" name="body" required></p>
+        <p><textarea name="body"   placeholder="Введите текст заметки" required></textarea></p>
         <p><label>Category: </label></p>
-        <p><input type="text" name="category" required></p>
+        <p><input type="text" name="category"       placeholder="Бэкенд" required></p>
         <p><label>Тэг:</label></p>
-        <p><input type="text" name="tag" required></p>
+        <p><input type="text" name="tag"   placeholder="Django" required></p>
         <p><button type="submit">Создать</button></p>
-    
+        <div class="actions">
+
+                <a
+                    class="action-link"
+                    href="{list_url}"
+                >
+                    Отмена
+                </a>
+
+            </div>
+
     </form> 
+
     """
 
     return HttpResponse(html_shell("Create new note", form)) 
+
+
+
+def notes_update(request: HttpRequest, note_id: int) -> HttpResponse:
+
+    note = data.get_note(note_id)
+
+    if note is None:
+
+        list_url = escape(
+            reverse("notes_list")
+        )
+
+        body = f"""
+        <h1>Can not edit</h1>
+        <p>   Запрошенная заметка
+        не найдена.</p>
+
+        <div class="actions">
+
+        <a
+
+        class="action-link"
+        href="{list_url}"
+        >
+        Вернуться к списку
+        </a>
+
+        </div>
+
+        """
+
+        return HttpResponse(
+            html_shell(
+                "Заметка не найдена",
+                body
+            ),
+            status=404
+        )
+
+
+    error = ""
+
+
+    if request.method == "POST":
+        title = request.POST.get("title","")
+        note_body = request.POST.get("body", "")
+        tag = request.POST.get("tag", "")
+        category = request.POST.get("category", "")
+
+
+
+
+        if not title.strip():
+
+            error = """
+            <div class="form-error">Title can not be empty</div>"""
+
+            note = {
+
+            **note,
+            "title": title,
+            "body": note_body,
+            "tag": tag,
+            "category":  category,
+
+
+
+            }
+
+        else:
+            data.update_note(
+
+        note_id,
+        title=title,
+        body=note_body,
+        tag=tag or 'mixed',
+        category=(
+                    category
+                    or "главная"
+                ),
+            )
+
+
+            return redirect(
+                    "notes_detail",
+                    note_id=note_id
+                )
+
+
+    title_e = escape(note["title"])
+    body_e = escape(note["body"])
+
+    tag_e = escape(note["tag"])
+    category_e = escape(note["category"])
+
+
+    action = escape(reverse('notes_edit', kwargs={'note_id': note_id}))
+  
+    cancel_url = escape(
+
+        reverse(
+
+            "notes_detail",
+
+            kwargs={
+                "note_id": note_id
+            }
+
+        )
+    )
+
+
+    form = f"""
+
+        <form
+        method="post"   
+        action="{action}">
+        {error}
+        {_csfr_field(request)}
+
+        <h1>New note </h1>
+        <p><label>Title:</label></p>
+        <p><input type = "text" name = "title" required value ={title_e}></p>
+        <p><label>Заметка:</label></p>
+        <textarea name="body" required value={body_e}></textarea>
+        <p><label>Category: </label></p>
+        <p><input type="text" name="category" required value = {category_e}></p>
+        <p><label>Тэг:</label></p>
+        <p><input type="text" name="tag" required value = {tag_e}></p>
+        <p><button type="submit">Save changes</button></p>
+                   <div class="actions">
+
+                <a
+                    class="action-link"
+                    href="{cancel_url}"
+                >
+                    Отмена
+                </a>
+
+            </div>
+
+
+        </form>
+
+    """
+
+    return HttpResponse(html_shell("Edit Note", form))
+
+
+            
+
+
+
+def notes_delete (request: HttpRequest, note_id:int) -> HttpResponse:
+
+    note = data.get_note(note_id)
+
+    if note is None:
+        list_url = escape(
+            reverse("notes_list")
+        )
+
+        body = f"""
+
+            <h1>Can not edit</h1>
+            <p>Requested note was not</p>
+
+            <div class="actions">
+
+                <a
+                    class="action-link"
+                    href="{list_url}"
+                >
+                    Вернуться к списку
+                </a>
+
+            </div>
+
+        """
+
+        return HttpResponse(
+            html_shell(
+                "Заметка не найдена",
+                body
+            ),
+            status=404
+        )
+
+
+
+
+    if request.method == "POST":
+        data.delete_note(note_id)
+        return redirect ("notes_list")
+
+
+    action = escape(reverse("notes_delete", kwargs={'note_id': note_id}))
+    
+    
+    cancel_url = escape(
+
+        reverse(
+
+            "notes_detail",
+
+            kwargs={
+                "note_id": note_id
+            }
+
+        )
+    )
+
+    
+    
+    body = f"""
+
+        <h1>Deletion of Note</h1>
+
+
+        <div class="delete-warning">
+
+
+            <span class="delete-warning-label">
+                Внимание
+            </span>
+
+
+            <p>
+
+                Вы действительно хотите
+                удалить заметку
+
+                <strong>{escape(note['title'])}</strong>
+
+
+            </p>
+
+
+            <p>
+                Это действие нельзя отменить.
+            </p>
+
+
+        </div>
+
+        <form method = "post" action ="{action}">
+ 
+        {_csfr_field(request)}
+
+
+            <button type="submit">
+                Да, удалить
+            </button>
+
+
+        </form>
+
+
+        <div class="actions">
+
+            <a
+                class="action-link"
+                href="{cancel_url}"
+            >
+                Отмена
+            </a>
+
+        </div>
+
+
+    """
+
+    return HttpResponse(html_shell("Note deletion", body))
